@@ -73,9 +73,9 @@ class HomePage extends StatelessWidget {
             color: Colors.blue.shade50,
             child: const Column(
               children: [
-                const Icon(Icons.shopping_bag, size: 48, color: Colors.blue),
-                const SizedBox(height: 8),
-                const Text(
+                Icon(Icons.shopping_bag, size: 48, color: Colors.blue),
+                SizedBox(height: 8),
+                Text(
                   'Ürün Listesi',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
@@ -113,7 +113,6 @@ class HomePage extends StatelessWidget {
   }
 }
 
-// Ürün Detay Sayfası
 class ProductDetailPage extends StatefulWidget {
   final String productId;
   const ProductDetailPage({super.key, required this.productId});
@@ -135,23 +134,41 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   Future<void> _fetchProductData() async {
     const int maxRetries = 3;
-    const Duration delay = Duration(milliseconds: 500);
-
+    const Duration delay = Duration(seconds: 2);
     final url = 'https://reqres.in/api/users/${widget.productId}';
 
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        final response = await http.get(Uri.parse(url));
+
+        final response = await http.get(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Bağlantı zaman aşımına uğradı');
+          },
+        );
 
         if (response.statusCode == 200) {
           final jsonResponse = json.decode(response.body);
 
           setState(() {
             _productData = {
-              'title': jsonResponse['data']['first_name'] + ' ' + jsonResponse['data']['last_name'],
+              'title': '${jsonResponse['data']['first_name']} ${jsonResponse['data']['last_name']}',
               'body': jsonResponse['data']['email'] ?? 'Açıklama yok.',
               'id': jsonResponse['data']['id'].toString(),
+              'avatar': jsonResponse['data']['avatar'] ?? '',
             };
+            _isLoading = false;
+          });
+          return;
+        } else if (response.statusCode == 404) {
+          setState(() {
+            _error = 'Ürün bulunamadı (ID: ${widget.productId}). Lütfen 1-12 arası bir ID deneyin.';
             _isLoading = false;
           });
           return;
@@ -164,17 +181,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             _error = 'Hata: ${response.statusCode} - Veri alınamadı. Tüm denemeler tükendi.';
             _isLoading = false;
           });
-          return;
         }
       } catch (e) {
+
         if (attempt < maxRetries) {
           await Future.delayed(delay);
         } else {
           setState(() {
-            _error = 'Bağlantı hatası: $e (Tekrarlı deneme başarısız)';
+            _error = 'Bağlantı hatası: İnternet bağlantınızı kontrol edin.\n\nDetay: $e';
             _isLoading = false;
           });
-          return;
         }
       }
     }
@@ -188,24 +204,49 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
+          ? const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              _error!,
-              style: const TextStyle(fontSize: 18, color: Colors.red),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => context.go('/'),
-              child: const Text('Ana Sayfaya Dön'),
-            ),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Ürün bilgileri yükleniyor...'),
           ],
+        ),
+      )
+          : _error != null
+          ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, color: Colors.red),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                  });
+                  _fetchProductData();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Tekrar Dene'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => context.go('/'),
+                child: const Text('Ana Sayfaya Dön'),
+              ),
+            ],
+          ),
         ),
       )
           : SingleChildScrollView(
@@ -348,7 +389,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     );
   }
 }
-
 
 class NotFoundPage extends StatelessWidget {
   const NotFoundPage({super.key});
